@@ -60,14 +60,14 @@ class HExpValMid:
 def getHLR(psi, l, H, dir, HLRold):
     if dir == '>>':
         if l == 0:
-            psi0 = bops.copyState(psi, conj=False)[0]
-            psi0Conj = bops.copyState(psi, conj=True)[0]
+            psi0 = bops.copyState([psi[l]], conj=False)[0]
+            psi0Conj = bops.copyState([psi[l]], conj=True)[0]
             psi0[0] ^ psi0Conj[0]
             psi0[1] ^ psi0Conj[1]
             identityChain = tn.contract_between(psi0, psi0Conj, name='identity-chain')
-            psi0 = bops.copyState(psi, conj=False)[0]
-            psi0Conj = bops.copyState(psi, conj=True)[0]
-            single0 = bops.copyState(H.singles, conj=False)[0]
+            psi0 = bops.copyState([psi[l]], conj=False)[0]
+            psi0Conj = bops.copyState([psi[l]], conj=True)[0]
+            single0 = bops.copyState([H.singles[l]], conj=False)[0]
             psi0[0] ^ psi0Conj[0]
             psi0[1] ^ single0[0]
             single0[1] ^ psi0Conj[1]
@@ -81,16 +81,16 @@ def getHLR(psi, l, H, dir, HLRold):
             openOp = tn.contract_between(psi0, tn.contract_between(psi0Conj, l2r0), name='open-operator')
             return HExpValMid(identityChain, opSum, openOp)
         else:
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
             psil[0] ^ HLRoldCopy[0]
             psilConj[0] ^ HLRoldCopy[1]
             psil[1] ^ psilConj[1]
             identityChain = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy), name='identity-chain')
 
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
             singlel = bops.copyState([H.singles[l]], conj=False)[0]
             psil[0]^HLRoldCopy[0]
@@ -101,29 +101,38 @@ def getHLR(psi, l, H, dir, HLRold):
                      tn.contract_between(psil, \
                      tn.contract_between(singlel, psilConj)), name='operator-sum')
 
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.openOp])[0]
-            r2ll = bops.copyState([H.r2l[l]], conj=False)[0]
+            r2l_l = bops.copyState([H.r2l[l]], conj=False)[0]
             psil[0] ^ HLRoldCopy[0]
             psilConj[0] ^ HLRoldCopy[1]
-            psil[1] ^ r2ll[0]
-            psilConj[1] ^ r2ll[1]
-            r2ll[2] ^ HLRoldCopy[2]
-            opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(r2ll, HLRoldCopy)))
+            psil[1] ^ r2l_l[0]
+            psilConj[1] ^ r2l_l[1]
+            r2l_l[2] ^ HLRoldCopy[2]
+            opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(r2l_l, HLRoldCopy)))
             opSum1.set_tensor(opSum1.get_tensor() + opSum2.get_tensor())
 
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
+            HLRoldCopy = bops.copyState([HLRold.opSum])[0]
+            psil[0] ^ HLRoldCopy[0]
+            psilConj[0] ^ HLRoldCopy[1]
+            psil[1] ^ psilConj[1]
+            opSum3 = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy))
+            opSum1.set_tensor(opSum1.get_tensor() + opSum3.get_tensor())
+
             if l < len(psi) - 1:
-                psil = bops.copyState(psi, conj=False)[l]
-                psilConj = bops.copyState(psi, conj=True)[l]
+                psil = bops.copyState([psi[l]], conj=False)[0]
+                psilConj = bops.copyState([psi[l]], conj=True)[0]
                 HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
-                l2rl = bops.copyState([H.l2r[l]], conj=False)[0]
+                l2r_l = bops.copyState([H.l2r[l]], conj=False)[0]
                 psil[0] ^ HLRoldCopy[0]
                 psilConj[0] ^ HLRoldCopy[1]
-                psil[1] ^ l2rl[1]
-                psilConj[1] ^ l2rl[2]
+                psil[1] ^ l2r_l[1]
+                psilConj[1] ^ l2r_l[2]
                 openOp =  tn.contract_between(HLRoldCopy, \
-                    tn.contract_between(psil, tn.contract_between(psilConj, l2rl)), name='open-operator')
+                    tn.contract_between(psil, tn.contract_between(psilConj, l2r_l)), name='open-operator')
             else:
                 openOp = None
             return HExpValMid(identityChain, opSum1, openOp)
@@ -134,65 +143,76 @@ def getHLR(psi, l, H, dir, HLRold):
             psil[2] ^ psilConj[2]
             psil[1] ^ psilConj[1]
             identityChain = tn.contract_between(psil, psilConj, name='identity-chain')
-            psi0 = bops.copyState(psi, conj=False)[0]
-            psi0Conj = bops.copyState(psi, conj=True)[0]
-            single0 = bops.copyState(H.singles, conj=False)[0]
-            psi0[0] ^ psi0Conj[0]
-            psi0[1] ^ single0[0]
-            single0[1] ^ psi0Conj[1]
-            opSum = tn.contract_between(psi0, tn.contract_between(psi0Conj, single0), name='operator-sum')
-            psi0 = bops.copyState(psi, conj=False)[0]
-            psi0Conj = bops.copyState(psi, conj=True)[0]
-            l2r0 = bops.copyState(H.l2r, conj=False)[0]
-            psi0[0] ^ psi0Conj[0]
-            psi0[1] ^ l2r0[1]
-            l2r0[2] ^ psi0Conj[1]
-            openOp = tn.contract_between(psi0, tn.contract_between(psi0Conj, l2r0), name='open-operator')
+
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
+            singlel = bops.copyState([H.singles[l]], conj=False)[0]
+            psil[2] ^ psilConj[2]
+            psil[1] ^ singlel[0]
+            singlel[1] ^ psilConj[1]
+            opSum = tn.contract_between(psil, tn.contract_between(psilConj, singlel), name='operator-sum')
+
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
+            r2l_l = bops.copyState([H.r2l[l]], conj=False)[0]
+            psil[2] ^ psilConj[2]
+            psil[1] ^ r2l_l[0]
+            r2l_l[1] ^ psilConj[1]
+            openOp = tn.contract_between(psil, tn.contract_between(psilConj, r2l_l), name='open-operator')
             return HExpValMid(identityChain, opSum, openOp)
         else:
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
-            psil[0] ^ HLRoldCopy[0]
-            psilConj[0] ^ HLRoldCopy[1]
+            psil[2] ^ HLRoldCopy[0]
+            psilConj[2] ^ HLRoldCopy[1]
             psil[1] ^ psilConj[1]
             identityChain = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy), name='identity-chain')
 
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
-            singlel = bops.copyState([H.singles[l]], conj=False)[0]
-            psil[0] ^ HLRoldCopy[0]
-            psilConj[0] ^ HLRoldCopy[1]
-            psil[1] ^ singlel[0]
-            psilConj[1] ^ singlel[1]
+            single_l = bops.copyState([H.singles[l]], conj=False)[0]
+            psil[2] ^ HLRoldCopy[0]
+            psilConj[2] ^ HLRoldCopy[1]
+            psil[1] ^ single_l[0]
+            psilConj[1] ^ single_l[1]
             opSum1 = tn.contract_between(HLRoldCopy, \
                                          tn.contract_between(psil, \
-                                         tn.contract_between(singlel, psilConj)), name='operator-sum')
+                                         tn.contract_between(single_l, psilConj)), name='operator-sum')
 
-            psil = bops.copyState(psi, conj=False)[l]
-            psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
             HLRoldCopy = bops.copyState([HLRold.openOp])[0]
-            r2ll = bops.copyState([H.r2l[l]], conj=False)[0]
-            psil[0] ^ HLRoldCopy[0]
-            psilConj[0] ^ HLRoldCopy[1]
-            psil[1] ^ r2ll[0]
-            psilConj[1] ^ r2ll[1]
-            r2ll[2] ^ HLRoldCopy[2]
-            opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(r2ll, HLRoldCopy)))
+            l2r_l = bops.copyState([H.l2r[l]], conj=False)[0]
+            psil[2] ^ HLRoldCopy[0]
+            psilConj[2] ^ HLRoldCopy[1]
+            psil[1] ^ l2r_l[1]
+            psilConj[1] ^ l2r_l[2]
+            l2r_l[0] ^ HLRoldCopy[2]
+            opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(l2r_l, HLRoldCopy)))
             opSum1.set_tensor(opSum1.get_tensor() + opSum2.get_tensor())
 
-            if l < len(psi) - 1:
-                psil = bops.copyState(psi, conj=False)[l]
-                psilConj = bops.copyState(psi, conj=True)[l]
+            psil = bops.copyState([psi[l]], conj=False)[0]
+            psilConj = bops.copyState([psi[l]], conj=True)[0]
+            HLRoldCopy = bops.copyState([HLRold.opSum])[0]
+            psil[2] ^ HLRoldCopy[0]
+            psilConj[2] ^ HLRoldCopy[1]
+            psil[1] ^ psilConj[1]
+            opSum3 = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy))
+            opSum1.set_tensor(opSum1.get_tensor() + opSum3.get_tensor())
+
+            if l > 0:
+                psil = bops.copyState([psi[l]], conj=False)[0]
+                psilConj = bops.copyState([psi[l]], conj=True)[0]
                 HLRoldCopy = bops.copyState([HLRold.identityChain])[0]
-                l2rl = bops.copyState([H.l2r[l]], conj=False)[0]
-                psil[0] ^ HLRoldCopy[0]
-                psilConj[0] ^ HLRoldCopy[1]
-                psil[1] ^ l2rl[1]
-                psilConj[1] ^ l2rl[2]
+                r2l_l = bops.copyState([H.r2l[l]], conj=False)[0]
+                psil[2] ^ HLRoldCopy[0]
+                psilConj[2] ^ HLRoldCopy[1]
+                psil[1] ^ r2l_l[0]
+                psilConj[1] ^ r2l_l[1]
                 openOp = tn.contract_between(HLRoldCopy, \
-                                 tn.contract_between(psil, tn.contract_between(psilConj, l2rl)), name='open-operator')
+                                 tn.contract_between(psil, tn.contract_between(psilConj, r2l_l)), name='open-operator')
             else:
                 openOp = None
             return HExpValMid(identityChain, opSum1, openOp)
@@ -210,4 +230,11 @@ H = getDMRGH(N, onsiteTerm, neighborTerm)
 HL = getHLR(psi, 0, H, '>>', 0)
 for l in range(1, N):
     HL = getHLR(psi, l, H, '>>', HL)
-    bops.printNode(HL.openOp)
+HR = getHLR(psi, N-1,  H, '<<', 0)
+l = N-2
+while l >= 0:
+    HR = getHLR(psi, l, H, '<<', HR)
+    bops.printNode(HR.identityChain)
+    bops.printNode(HR.openOp)
+    bops.printNode(HR.opSum)
+    l -= 1
