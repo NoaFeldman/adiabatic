@@ -1,6 +1,7 @@
 import tensornetwork as tn
 import tensornetwork.backends.base_backend as be
 import numpy as np
+import math
 
 def getStartupState(n):
     psi = [None] * n
@@ -66,5 +67,40 @@ def copyState(psi, conj=False):
                 else:
                     edge.name = edge.name + '*'
     return result
+
+def addNodes(node1, node2):
+    # TODO asserts
+    result = copyState([node1])[0]
+    result.set_tensor(result.get_tensor() + node2.get_tensor())
+    return result
+
+def multNode(node, c):
+    result = copyState([node])[0]
+    result.set_tensor(result.get_tensor() * c)
+    return result
+
+
+def getNodeNorm(node):
+    copy = copyState([node])[0]
+    copyConj = copyState([node], conj=True)[0]
+    for i in ragne(node.get_rank()):
+        copy[i] ^ copyConj[i]
+    return math.sqrt(tn.contract_between(copy, copyConj).get_tensor())
+
+
+def multiContraction(node1, node2, edges1, edges2):
+    if edges1[len(edges1) - 1] == '*':
+        copy1 = copyState([node1], conj=True)[0]
+        edges1 = edges1[0:len(edges1) - 1]
+    else:
+        copy1 = copyState([node1])[0]
+    if edges2[len(edges2) - 1] == '*':
+        copy2 = copyState([node2], conj=True)[0]
+        edges2 = edges2[0:len(edges2) - 1]
+    else:
+        copy2 = copyState([node2])[0]
+    for i in range(len(edges1)):
+        copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
+    return tn.contract_between(copy1, copy2)
 
 
