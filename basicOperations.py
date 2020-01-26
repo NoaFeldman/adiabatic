@@ -83,7 +83,7 @@ def multNode(node, c):
 def getNodeNorm(node):
     copy = copyState([node])[0]
     copyConj = copyState([node], conj=True)[0]
-    for i in ragne(node.get_rank()):
+    for i in range(node.get_rank()):
         copy[i] ^ copyConj[i]
     return math.sqrt(tn.contract_between(copy, copyConj).get_tensor())
 

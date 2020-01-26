@@ -197,7 +197,7 @@ def getTridiagonal(HR, HL, H, k, psi):
     Hv = applyHToM(HR, HL, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
 
-    w = bops.addNodes(Hv , bops.multNode(v, -alpha))
+    w = bops.addNodes(Hv, bops.multNode(v, -alpha))
     beta = bops.getNodeNorm(w)
 
     # Start with T as an array and turn into tridiagonal matrix at the end.
@@ -205,7 +205,7 @@ def getTridiagonal(HR, HL, H, k, psi):
     Tarr[0][1] = alpha
     counter = 0
     formBeta = 2 * beta # This is just some value to init formBeta > beta.
-    while beta > accuracy & counter <= 50 & beta < formBeta:
+    while (beta > accuracy) and (counter <= 50) and (beta < formBeta):
         Tarr[counter][2] = beta
         Tarr.append([0, 0, 0])
         Tarr[counter + 1][0] = beta
@@ -241,9 +241,12 @@ def applyHToM(HR, HL, H, M, k):
     Hv = bops.multiContraction(HL.opSum, M, '0', '0')
     Hv = bops.addNodes(Hv, bops.multiContraction(M, HR.opSum, '3', '0'))
 
-    # # Add I(Left) x h.single(k1) x h.identity(k2) x I(Right)
-    # # And I(Left) x h.identity(k1) x h.single(k2) x I(Right)
-    # Hv = Hv + contract(M, 2, H.single(k1), 2, [1 4 2 3]);
+    # Add I(Left) x h.single(k1) x h.identity(k2) x I(Right)
+    # And I(Left) x h.identity(k1) x h.single(k2) x I(Right)
+    Hv = bops.addNodes(Hv, \
+                       tn.transpose(bops.multiContraction(M, H.singles[k1], '1', '0'), [0, 3, 1, 2]))
+    Hv = bops.addNodes(Hv, \
+                       tn.transpose(bops.multiContraction(M, H.singles[k2], '2', '0'), [0, 1, 3, 2]))
     # Hv = Hv + contract(M, 3, H.single(k2), 2, [1 2 4 3]);
     #
     # # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
@@ -273,18 +276,16 @@ psi = bops.getStartupState(N)
 t = 0.5
 onsiteTerm = np.zeros((2, 2))
 onsiteTerm[1][1] = 1
+onsiteTerm[0][0] = 1
 neighborTerm = np.zeros((4, 4))
 neighborTerm[1][2] = 1
 neighborTerm[2][1] = 1
 H = getDMRGH(N, onsiteTerm, neighborTerm)
-HL = getHLR(psi, -1, H, '>>', 0)
+HLs = [None] * (N+1)
+HLs[0] = getHLR(psi, -1, H, '>>', 0)
 for l in range(N):
-    HL = getHLR(psi, l, H, '>>', HL)
-HR = getHLR(psi, N,  H, '<<', 0)
-l = N-1
-while l >= 0:
-    HR = getHLR(psi, l, H, '<<', HR)
-    bops.printNode(HR.identityChain)
-    bops.printNode(HR.openOp)
-    bops.printNode(HR.opSum)
-    l -= 1
+    HLs[l+1] = getHLR(psi, l, H, '>>', HLs[l])
+HRs = [None] * (N+1)
+HRs[N] = getHLR(psi, N,  H, '<<', 0)
+k = N-2
+[T, base] = getTridiagonal(HRs[k+2], HLs[k], H, k, psi)
