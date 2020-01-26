@@ -18,14 +18,14 @@ def getDMRGH(N, onsiteTerm, neighborTerm):
     for i in range(N):
         hSingles[i] = tn.Node(onsiteTerm, name=('single' + str(i)), axis_names=['s' + str(i) + '*', 's' + str(i)])
     hr2l = [None] * (N)
-    hl2r = [None] * (N-1)
+    hl2r = [None] * (N)
     for i in range(N-1):
         pairOp = tn.Node(neighborTerm, \
                          axis_names=['s' + str(i) + '*', 's' + str(i+1) + '*', 's' + str(i), 's' + str(i+1)])
         splitted = tn.split_node(pairOp, [pairOp[0], pairOp[2]], [pairOp[1], pairOp[3]], \
                                           left_name=('l2r' + str(i)), right_name=('r2l' + str(i) + '*'), edge_name='m')
-        hr2l[i+1] = splitted[0]
-        hl2r[i] = splitted[1]
+        hr2l[i+1] = tn.transpose(splitted[1], [1, 2, 0])
+        hl2r[i] = splitted[0]
     return HOp(hSingles, hr2l, hl2r)
 
 class HExpValMid:
@@ -107,8 +107,8 @@ def getHLR(psi, l, H, dir, HLRold):
                 psilConj = bops.copyState([psi[l]], conj=True)[0]
                 l2r_l = bops.copyState([H.l2r[l]], conj=False)[0]
                 psil[0] ^ psilConj[0]
-                psil[1] ^ l2r_l[1]
-                psilConj[1] ^ l2r_l[2]
+                psil[1] ^ l2r_l[0]
+                psilConj[1] ^ l2r_l[1]
                 openOp =  tn.contract_between(psil, tn.contract_between(psilConj, l2r_l), name='open-operator')
             else:
                 openOp = None
@@ -142,9 +142,9 @@ def getHLR(psi, l, H, dir, HLRold):
                 l2r_l = bops.copyState([H.l2r[l]], conj=False)[0]
                 psil[2] ^ HLRoldCopy[0]
                 psilConj[2] ^ HLRoldCopy[1]
-                psil[1] ^ l2r_l[1]
-                psilConj[1] ^ l2r_l[2]
-                l2r_l[0] ^ HLRoldCopy[2]
+                psil[1] ^ l2r_l[0]
+                psilConj[1] ^ l2r_l[1]
+                l2r_l[2] ^ HLRoldCopy[2]
                 opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(l2r_l, HLRoldCopy)))
                 opSum1 = bops.addNodes(opSum1, opSum2)
 
@@ -247,18 +247,17 @@ def applyHToM(HR, HL, H, M, k):
                        tn.transpose(bops.multiContraction(M, H.singles[k1], '1', '0'), [0, 3, 1, 2]))
     Hv = bops.addNodes(Hv, \
                        tn.transpose(bops.multiContraction(M, H.singles[k2], '2', '0'), [0, 1, 3, 2]))
-    # Hv = Hv + contract(M, 3, H.single(k2), 2, [1 2 4 3]);
-    #
-    # # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
-    # # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
-    # HK1R2L = contract(H.r2l(k1), 2, M, 2, [2 3 1 4 5]);
-    # Hv = Hv + contract(HL.openOp, '12', HK1R2L, '12');
-    # HK1R2L2 = contract(H.r2l2(k1), 2, M, 2, [2 3 1 4 5]);
-    # Hv = Hv + contract(HL2.toClose, '12', HK1R2L2, '12');
-    # HK2L2R = contract(H.l2r(k2), 2, M, 3, [3 4 1 2 5]);
-    # Hv = Hv + contract(HK2L2R, '45', HR.openOp, '12');
-    # HK2L2R2 = contract(H.l2r2(k2), 2, M, 3, [3 4 1 2 5]);
-    # Hv = Hv + contract(HK2L2R2, '45', HR2.toClose, '12');
+
+    # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
+    # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
+    HK1R2L = tn.transpose(bops.multiContraction(H.r2l[k1], M, '0', '1'), [2, 1, 0, 3, 4])
+    Hv = bops.addNodes(Hv, \
+                      bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
+    # TODO myTranspose (handle Nones, name axis correctly)
+    HK2L2R = tn.transpose(bops.multiContraction(H.l2r[k2], M, '0', '2'), [2, 3, 0, 1, 4])
+    Hv = bops.addNodes(Hv, \
+                       bops.multiContraction(HK2L2R, HR.openOp, '34', '02'))
+
     # # Add I(Left) x h.l2r(k1) x h.r2l(k2) x I(Right)
     # HK1K2 = contract(M, 2, H.l2r(k1), 2, [1 4 5 2 3]);
     # Hv = Hv + contract(HK1K2, '34', H.r2l(k2), '32', [1 2 4 3]);

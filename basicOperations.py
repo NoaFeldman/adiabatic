@@ -88,7 +88,9 @@ def getNodeNorm(node):
     return math.sqrt(tn.contract_between(copy, copyConj).get_tensor())
 
 
-def multiContraction(node1, node2, edges1, edges2):
+def multiContraction(node1, node2, edges1, edges2, nodeName=None):
+    if node1 is None or node2 is None:
+        return None
     if edges1[len(edges1) - 1] == '*':
         copy1 = copyState([node1], conj=True)[0]
         edges1 = edges1[0:len(edges1) - 1]
@@ -101,6 +103,6 @@ def multiContraction(node1, node2, edges1, edges2):
         copy2 = copyState([node2])[0]
     for i in range(len(edges1)):
         copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
-    return tn.contract_between(copy1, copy2)
+    return tn.contract_between(copy1, copy2, name=nodeName)
 
 
