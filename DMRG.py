@@ -24,7 +24,7 @@ def getDMRGH(N, onsiteTerm, neighborTerm):
                          axis_names=['s' + str(i) + '*', 's' + str(i+1) + '*', 's' + str(i), 's' + str(i+1)])
         splitted = tn.split_node(pairOp, [pairOp[0], pairOp[2]], [pairOp[1], pairOp[3]], \
                                           left_name=('l2r' + str(i)), right_name=('r2l' + str(i) + '*'), edge_name='m')
-        hr2l[i+1] = tn.transpose(splitted[1], [1, 2, 0])
+        hr2l[i+1] = bops.permute(splitted[1], [1, 2, 0])
         hl2r[i] = splitted[0]
     return HOp(hSingles, hr2l, hl2r)
 
@@ -174,12 +174,11 @@ def getHLR(psi, l, H, dir, HLRold):
 def lanczos(HR, HL, H, k, psi):
     [T, base] = getTridiagonal(HR, HL, H, k, psi)
     [Es, Vs] = np.linalg.eig(T)
-    minIndex = Es.index(min(Es))
+    minIndex = np.argmin(Es)
     E0 = Es[minIndex]
-    V0 = Vs[minIndex]
-    M = tn.Node()
+    M = None
     for i in range(len(Es)):
-        M = bops.addNodes(M, bops.multNode(base(i), Vs(i, V0)))
+        M = bops.addNodes(M, bops.multNode(base[i], Vs[i][minIndex]))
 
     M = bops.multNode(M, 1/bops.getNodeNorm(M))
     return [M, E0]
@@ -250,27 +249,23 @@ def applyHToM(HR, HL, H, M, k):
 
     # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
-    HK1R2L = tn.transpose(bops.multiContraction(H.r2l[k1], M, '0', '1'), [2, 1, 0, 3, 4])
+    HK1R2L = bops.permute(bops.multiContraction(H.r2l[k1], M, '0', '1'), [2, 1, 0, 3, 4])
     Hv = bops.addNodes(Hv, \
                       bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
-    # TODO myTranspose (handle Nones, name axis correctly)
-    HK2L2R = tn.transpose(bops.multiContraction(H.l2r[k2], M, '0', '2'), [2, 3, 0, 1, 4])
+    HK2L2R = bops.permute(bops.multiContraction(H.l2r[k2], M, '0', '2'), [2, 3, 0, 1, 4])
     Hv = bops.addNodes(Hv, \
                        bops.multiContraction(HK2L2R, HR.openOp, '34', '02'))
 
-    # # Add I(Left) x h.l2r(k1) x h.r2l(k2) x I(Right)
-    # HK1K2 = contract(M, 2, H.l2r(k1), 2, [1 4 5 2 3]);
-    # Hv = Hv + contract(HK1K2, '34', H.r2l(k2), '32', [1 2 4 3]);
-    #
-    # # Add cotribution of HL2.toContinue with right site of M and its mirror
-    # temp = contract(HL2.toContinue, 2, M, 1);
-    # Hv = Hv + contract(temp, '14', H.r2l2(k2), '32', [1 2 4 3]);
-    # temp = contract(HR2.toContinue, 2, M, 4);
-    # Hv = Hv + contract(temp, '14', H.l2r2(k1), '32', [2 4 3 1]);
+    # Add I(Left) x h.l2r(k1) x h.r2l(k2) x I(Right)
+    HK1K2 = bops.multiContraction(M, H.l2r[k1], '1', '0')
+    HK1K2 = bops.multiContraction(HK1K2, H.r2l[k2], '14', '02')
+    HK1K2 = bops.permute(HK1K2, [0, 2, 3, 1])
+    Hv = bops.addNodes(Hv, HK1K2)
+
     return Hv
 
 
-N=4
+N=8
 psi = bops.getStartupState(N)
 t = 0.5
 onsiteTerm = np.zeros((2, 2))
@@ -279,6 +274,8 @@ onsiteTerm[0][0] = 1
 neighborTerm = np.zeros((4, 4))
 neighborTerm[1][2] = 1
 neighborTerm[2][1] = 1
+neighborTerm[0][0] = 1
+neighborTerm[3][3] = 1
 H = getDMRGH(N, onsiteTerm, neighborTerm)
 HLs = [None] * (N+1)
 HLs[0] = getHLR(psi, -1, H, '>>', 0)
@@ -288,3 +285,6 @@ HRs = [None] * (N+1)
 HRs[N] = getHLR(psi, N,  H, '<<', 0)
 k = N-2
 [T, base] = getTridiagonal(HRs[k+2], HLs[k], H, k, psi)
+[M, E0] = lanczos(HRs[k+2], HLs[k], H, k, psi)
+print(E0)
+bops.printNode(M)

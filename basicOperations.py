@@ -13,11 +13,11 @@ def getStartupState(n):
     baseMiddleTensorOdd[0, 1, 0] = 1
     baseMiddleTensorEven = np.zeros((2, 2, 2))
     baseMiddleTensorEven[0, 0, 0] = 1
-    for i in range(int(n/2)):
-        psi[i + 1] = tn.Node(baseMiddleTensorOdd, name=('site' + str(i + 1)), \
+    for i in range(1, int(n/2)):
+        psi[2*i - 1] = tn.Node(baseMiddleTensorOdd, name=('site' + str(i + 1)), \
                                axis_names=['vL' + str(i + 1), 's' + str(i + 1), 'vR' + str(i+2) + '*'], \
                                backend = None)
-        psi[i + 2] = tn.Node(baseMiddleTensorEven, name=('site' + str(i + 2)), \
+        psi[2*i] = tn.Node(baseMiddleTensorEven, name=('site' + str(i + 2)), \
                              axis_names=['vL' + str(i + 2), 's' + str(i + 2), 'vR' + str(i + 3) + '*'], \
                              backend = None)
     baseRightTensor = np.zeros((2, 2, 1))
@@ -70,9 +70,18 @@ def copyState(psi, conj=False):
 
 def addNodes(node1, node2):
     # TODO asserts
-    result = copyState([node1])[0]
-    result.set_tensor(result.get_tensor() + node2.get_tensor())
-    return result
+    if node1 is None:
+        if node2 is None:
+            return None
+        else:
+            return node2
+    else:
+        if node2 is None:
+            return node1
+        else:
+            result = copyState([node1])[0]
+            result.set_tensor(result.get_tensor() + node2.get_tensor())
+            return result
 
 def multNode(node, c):
     result = copyState([node])[0]
@@ -105,4 +114,16 @@ def multiContraction(node1, node2, edges1, edges2, nodeName=None):
         copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
     return tn.contract_between(copy1, copy2, name=nodeName)
 
+
+def permute(node, permutation):
+    if node is None:
+        return None
+    axisNames = []
+    for i in range(len(permutation)):
+        axisNames.append(node.edges[permutation[i]].name)
+    result = tn.transpose(node, permutation, axis_names=axisNames)
+    result.add_axis_names(axisNames)
+    for i in range(len(axisNames)):
+        result.get_edge(i).set_name(axisNames[i])
+    return result
 
