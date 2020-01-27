@@ -265,6 +265,16 @@ def applyHToM(HR, HL, H, M, k):
     return Hv
 
 
+# def decomposeAndTruncate(M, k, dir, opts)
+#     # perform an SVD decomposition on M.
+#
+#     [psi(k), psi(k+1), I] = myOrthoQS(M, [1, 2], dir, opts);
+#     truncErr = I.svd2tr;
+#     psi(k).info.itags(length(psi(k).info.itags)) = ...
+#         strcat(int2str(k), 'a', psi(k).info.itags(length(psi(k).info.itags)));
+#     psi(k+1).info.itags(1) = strcat(int2str(k), 'a', psi(k+1).info.itags(1));
+
+
 N=8
 psi = bops.getStartupState(N)
 t = 0.5
@@ -286,5 +296,9 @@ HRs[N] = getHLR(psi, N,  H, '<<', 0)
 k = N-2
 [T, base] = getTridiagonal(HRs[k+2], HLs[k], H, k, psi)
 [M, E0] = lanczos(HRs[k+2], HLs[k], H, k, psi)
-print(E0)
+# TODO this gives s5, s7 for some reason
 bops.printNode(M)
+# TODO this is buggy
+[l, r] = bops.svdTruncation(M, M.get_all_edges()[:2], M.get_all_edges()[2:], '<<')
+bops.printNode(l)
+bops.printNode(r)

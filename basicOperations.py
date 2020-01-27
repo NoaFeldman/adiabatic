@@ -97,7 +97,7 @@ def getNodeNorm(node):
     return math.sqrt(tn.contract_between(copy, copyConj).get_tensor())
 
 
-def multiContraction(node1, node2, edges1, edges2, nodeName=None):
+def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None):
     if node1 is None or node2 is None:
         return None
     if edges1[len(edges1) - 1] == '*':
@@ -115,7 +115,7 @@ def multiContraction(node1, node2, edges1, edges2, nodeName=None):
     return tn.contract_between(copy1, copy2, name=nodeName)
 
 
-def permute(node, permutation):
+def permute(node: tn.Node, permutation):
     if node is None:
         return None
     axisNames = []
@@ -127,3 +127,13 @@ def permute(node, permutation):
         result.get_edge(i).set_name(axisNames[i])
     return result
 
+
+def svdTruncation(node: tn.Node, leftEdges, rightEdges, dir, maxBondDim=1024, leftName=None, rightName=None):
+    [U, S, V] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
+                                       left_name=leftName, right_name=rightName)
+    if dir == '>>':
+        S[1] ^ V[0]
+        return [U, tn.contract_between(S, V, name=V.name)]
+    else:
+        U[len(U.get_all_edges) - 1] ^ S[0]
+        return [tn.contract_between(U, S, name=U.name), V]
