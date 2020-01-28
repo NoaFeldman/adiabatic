@@ -169,9 +169,13 @@ def getIdentity(psi, k, dir):
     psil = bops.copyState([psi[k]])[0]
     psilCopy = bops.copyState([psi[k]], conj=True)[0]
     if dir == '>>':
-        return bops.multiContraction(psil, psilCopy, '01', '01')
+        result = bops.multiContraction(psil, psilCopy, '01', '01').tensor
     else:
-        return bops.multiContraction(psil, psilCopy, '12', '12')
+        result = bops.multiContraction(psil, psilCopy, '12', '12').tensor
+    for i in range(len(result)):
+        for j in range(len(result[0])):
+            result[i][j] = int(result[i][j])
+    return result
 
 
 def getTridiagonal(HL, HR, H, k, psi):
@@ -190,16 +194,6 @@ def getTridiagonal(HL, HR, H, k, psi):
     Hv = applyHToM(HL, HR, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
 
-    if k > 0:
-        idl = getIdentity(psi, k-1, '>>')
-        print(idl.tensor)
-        # idl = getIdentity(psi, k, '>>')
-        # print(idl.tensor)
-        # idr = getIdentity(psi, k+1, '<<')
-        # print(idr.tensor)
-    if k+2 < len(psi):
-        idr = getIdentity(psi, k+2, '<<')
-        print(idr.tensor)
     E = stateEnergy(psi, H)
     print(E/alpha)
 
@@ -283,7 +277,19 @@ def dmrgStep(HL, HR, H, psi, k, dir, opts=None):
     k2 = k + 1;
     [M, E0] = lanczos(HL, HR, H, k1, psi)
     if k == 0:
-        d=1
+        d=2
+    if dir == '>>':
+        if k > 1:
+            idl = getIdentity(psi, k - 2, '>>')
+            print(idl)
+        idr = getIdentity(psi, k, '<<')
+        print(idr)
+    else:
+        idl = getIdentity(psi, k, '>>')
+        print(idl)
+        if k + 2 < len(psi):
+            idr = getIdentity(psi, k + 2, '<<')
+            print(idr)
     [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir)
     if dir == '>>':
         newHL = getHLR(psi, k, H, dir, HL)
@@ -353,13 +359,13 @@ N = 8
 psi = bops.getStartupState(N)
 t = 0.5
 onsiteTerm = np.zeros((2, 2))
-onsiteTerm[1][1] = 1
-onsiteTerm[0][0] = 1
+onsiteTerm[1][1] = 0
+onsiteTerm[0][0] = 0
 neighborTerm = np.zeros((4, 4))
-neighborTerm[1][2] = 0
-neighborTerm[2][1] = 0
-neighborTerm[0][0] = 0
-neighborTerm[3][3] = 0
+neighborTerm[1][2] = 1
+neighborTerm[2][1] = 1
+neighborTerm[0][0] = 1
+neighborTerm[3][3] = 1
 H = getDMRGH(N, onsiteTerm, neighborTerm)
 HLs = [None] * (N+1)
 HLs[0] = getHLR(psi, -1, H, '>>', 0)

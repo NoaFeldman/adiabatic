@@ -22,8 +22,8 @@ def getStartupState(n):
                                axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)], \
                                backend = None)
     baseRightTensor = np.zeros((2, 2, 1))
-    baseRightTensor[0, 1, 0] = 1
-    baseRightTensor[1, 0, 0] = 0
+    baseRightTensor[0, 1, 0] = 1 / math.sqrt(2)
+    baseRightTensor[1, 0, 0] = 1 / math.sqrt(2)
     psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)), \
                                axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)], \
                                backend = None)
