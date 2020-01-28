@@ -298,7 +298,10 @@ k = N-2
 [M, E0] = lanczos(HRs[k+2], HLs[k], H, k, psi)
 # TODO this gives s5, s7 for some reason
 bops.printNode(M)
-# TODO this is buggy
-[l, r] = bops.svdTruncation(M, M.get_all_edges()[:2], M.get_all_edges()[2:], '<<')
+[l, r] = bops.svdTruncation(M, [M[0], M[1]], [M[2], M[3]], '<<', leftEdgeName='VR5',  rightEdgeName='vL6*')
 bops.printNode(l)
 bops.printNode(r)
+# TODO  same edge  for unconnected nodes
+# TODO svd truncation edge name
+# https://github.com/google/TensorNetwork/blob/master/tensornetwork/network_operations.py#L473
+# TODO remove nodes

@@ -2,6 +2,8 @@ import tensornetwork as tn
 import tensornetwork.backends.base_backend as be
 import numpy as np
 import math
+from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
+    Sequence, Iterable, Type
 
 def getStartupState(n):
     psi = [None] * n
@@ -128,12 +130,28 @@ def permute(node: tn.Node, permutation):
     return result
 
 
-def svdTruncation(node: tn.Node, leftEdges, rightEdges, dir, maxBondDim=1024, leftName=None, rightName=None):
-    [U, S, V] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
-                                       left_name=leftName, right_name=rightName)
+def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.Edge], \
+                  dir: str, maxBondDim=1024, leftName='U', rightName='V',  leftEdgeName=None, rightEdgeName=None):
+    maxBondDim = getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges)
+    [U, S, V, te] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
+                                       left_name=leftName, right_name=rightName, left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
     if dir == '>>':
-        S[1] ^ V[0]
         return [U, tn.contract_between(S, V, name=V.name)]
     else:
-        U[len(U.get_all_edges) - 1] ^ S[0]
+        # U[len(U.get_all_edges()) - 1] ^ S[0]
         return [tn.contract_between(U, S, name=U.name), V]
+
+# Apparently the truncation method doesn'tlike it if max_singular_values is larger than the size of S.
+def  getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
+    uDim = 1
+    for e in leftEdges:
+        uDim *= e.dimension
+    vDim = 1
+    for e in rightEdges:
+        vDim *= e.dimension
+    if maxBondDim > min(uDim, vDim):
+        return min(uDim, vDim)
+    else:
+        return maxBondDim
+
+
