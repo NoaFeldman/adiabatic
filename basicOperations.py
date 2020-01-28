@@ -8,44 +8,53 @@ from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
 def getStartupState(n):
     psi = [None] * n
     baseLeftTensor = np.zeros((1, 2, 2))
-    baseLeftTensor[0, 0, 0] = 1
-    psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['vL0', 's0', 'vR1*'], \
+    baseLeftTensor[0, 0, 0] = -1
+    baseLeftTensor[0, 1, 1] = 1
+    psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], \
                 backend = None)
-    baseMiddleTensorOdd = np.zeros((2, 2, 2))
-    baseMiddleTensorOdd[0, 1, 0] = 1
-    baseMiddleTensorEven = np.zeros((2, 2, 2))
-    baseMiddleTensorEven[0, 0, 0] = 1
-    for i in range(1, int(n/2)):
-        psi[2*i - 1] = tn.Node(baseMiddleTensorOdd, name=('site' + str(i + 1)), \
-                               axis_names=['vL' + str(i + 1), 's' + str(i + 1), 'vR' + str(i+2) + '*'], \
+    baseMiddleTensor = np.zeros((2, 2, 2))
+    baseMiddleTensor[0, 1, 0] = 1
+    baseMiddleTensor[0, 0, 1] = 1
+    # baseMiddleTensor[0, 0, 0] = 1
+    # baseMiddleTensor[0, 1, 1] = 1
+    for i in range(1, n-1):
+        psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)), \
+                               axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)], \
                                backend = None)
-        psi[2*i] = tn.Node(baseMiddleTensorEven, name=('site' + str(i + 2)), \
-                             axis_names=['vL' + str(i + 2), 's' + str(i + 2), 'vR' + str(i + 3) + '*'], \
-                             backend = None)
     baseRightTensor = np.zeros((2, 2, 1))
     baseRightTensor[0, 1, 0] = 1
+    baseRightTensor[1, 0, 0] = 0
     psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)), \
-                               axis_names=['vL' + str(n - 1), 's' + str(n - 1), 'vR' + str(n)], \
+                               axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)], \
                                backend = None)
+    norm = getOverlap(psi, psi)
+    psi[0] = multNode(psi[0], 1/math.sqrt(norm))
     return psi
 
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
 # assuming psi2 is conjugated
-def getOverlap(psi1, psi2):
+def getOverlap(psi1Orig: List[tn.Node], psi2Orig: List[tn.Node]):
+    psi1 = copyState(psi1Orig)
+    psi2 = copyState(psi2Orig, conj=True)
     psi1[0][0] ^ psi2[0][0]
     psi1[0][1] ^ psi2[0][1]
-    contracted = tn.contract_between(psi1[0], psi2[0])
+    contracted = tn.contract_between(psi1[0], psi2[0], name='contracted')
     for i in range(1, len(psi1) - 1):
-        contracted = tn.contract(contracted[0] ^ psi1[i][0])
-        contracted[0] ^ psi2[i][0]
-        contracted[1] ^ psi2[i][1]
-        contracted = tn.contract_between(contracted, psi2[i])
-    contracted = tn.contract(contracted[0] ^ psi1[len(psi1) - 1][0])
-    contracted[0] ^ psi2[len(psi1) - 1][0]
-    contracted[1] ^ psi2[len(psi1) - 1][1]
-    contracted[2] ^ psi2[len(psi1) - 1][2]
-    contracted = tn.contract_between(contracted, psi2[len(psi1) - 1])
-    return contracted.tensor
+        psi1[i][1] ^ psi2[i][1]
+        contracted[0] ^ psi1[i][0]
+        contracted[1] ^ psi2[i][0]
+        contracted = tn.contract_between(tn.contract_between(contracted, psi1[i]), psi2[i])
+    psi1[len(psi1) - 1][1] ^ psi2[len(psi1) - 1][1]
+    psi1[len(psi1) - 1][2] ^ psi2[len(psi1) - 1][2]
+    contracted[0] ^ psi1[len(psi1) - 1][0]
+    contracted[1] ^ psi2[len(psi1) - 1][0]
+    contracted = tn.contract_between(tn.contract_between(contracted, psi1[len(psi1) - 1]), psi2[len(psi1) - 1])
+
+    result = contracted.tensor
+    tn.remove_node(contracted)
+    removeState(psi1)
+    removeState(psi2)
+    return result
 
 def printNode(node):
     if node == None:
@@ -127,22 +136,37 @@ def permute(node: tn.Node, permutation):
     result.add_axis_names(axisNames)
     for i in range(len(axisNames)):
         result.get_edge(i).set_name(axisNames[i])
+    result.set_name(node.name)
     return result
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.Edge], \
-                  dir: str, maxBondDim=1024, leftName='U', rightName='V',  leftEdgeName=None, rightEdgeName=None):
+                  dir: str, maxBondDim=1024, leftName='U', rightName='V',  edgeName=None):
     maxBondDim = getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges)
-    [U, S, V, te] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
-                                       left_name=leftName, right_name=rightName, left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
     if dir == '>>':
-        return [U, tn.contract_between(S, V, name=V.name)]
+        leftEdgeName = edgeName
+        rightEdgeName = None
     else:
-        # U[len(U.get_all_edges()) - 1] ^ S[0]
-        return [tn.contract_between(U, S, name=U.name), V]
+        leftEdgeName = None
+        rightEdgeName = edgeName
+
+    [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
+                                       left_name=leftName, right_name=rightName, \
+                                       left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
+    if dir == '>>':
+        l = copyState([U])[0]
+        r = copyState([tn.contract_between(S, V, name=V.name)])[0]
+    else:
+        l = copyState([tn.contract_between(U, S, name=U.name)])[0]
+        r = copyState([V])[0]
+    tn.remove_node(U)
+    tn.remove_node(S)
+    tn.remove_node(V)
+    return [l, r, truncErr]
+
 
 # Apparently the truncation method doesn'tlike it if max_singular_values is larger than the size of S.
-def  getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
+def getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
     uDim = 1
     for e in leftEdges:
         uDim *= e.dimension
@@ -155,3 +179,21 @@ def  getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
         return maxBondDim
 
 
+# Split M into 2 3-rank tensors for sites k, k+1
+def assignNewSiteTensors(psi, k, M, dir):
+    [sitek, sitekPlus1, truncErr] = svdTruncation(M, [M[0], M[1]], [M[2], M[3]], \
+            dir, leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)))
+    tn.remove_node(psi[k])
+    psi[k] = sitek
+    # if k > 0:
+    #     psi[k-1][2] ^ psi[k]
+    tn.remove_node(psi[k+1])
+    psi[k+1] = sitekPlus1
+    # if k+2 < len(psi):
+    #     psi[k+1][2] ^ psi[k+2][0]
+    return [psi, truncErr]
+
+
+def removeState(psi):
+    for i in range(len(psi)):
+        tn.remove_node(psi[i])

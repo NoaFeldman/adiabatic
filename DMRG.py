@@ -29,15 +29,11 @@ def getDMRGH(N, onsiteTerm, neighborTerm):
     return HOp(hSingles, hr2l, hl2r)
 
 class HExpValMid:
-    def __init__(self, identityChain, opSum, openOp):
-    # HLR.identityChain is
-    # I x I x I...
-    # for all sites contracted (two degree tensor).
+    def __init__(self, opSum, openOp):
     # HLR.opSum is
     # H(1).single x I x I... + I x H(2).single x I... + H.l2r(1) x H.r2l(2) x I...(two degree tensor)
     # HLR.openOp is
     # I x I x...x H(l).l2r(three degree tensor)
-        self.identityChain = identityChain
         self.opSum = opSum
         self.openOp = openOp
 
@@ -61,17 +57,10 @@ class HExpValMid:
 def getHLR(psi, l, H, dir, HLRold):
     if dir == '>>':
         if l == -1:
-            identityChain = tn.Node(np.zeros((psi[0].get_dimension(0), psi[0].get_dimension(0))))
             opSum = tn.Node(np.zeros((psi[0].get_dimension(0), psi[0].get_dimension(0))))
             openOp = tn.Node(np.zeros((psi[0].get_dimension(0), psi[0].get_dimension(0))))
-            return HExpValMid(identityChain, opSum, openOp)
+            return HExpValMid(opSum, openOp)
         else:
-            psil = bops.copyState([psi[l]], conj=False)[0]
-            psilConj = bops.copyState([psi[l]], conj=True)[0]
-            psil[0] ^ psilConj[0]
-            psil[1] ^ psilConj[1]
-            identityChain = tn.contract_between(psil, psilConj, name='identity-chain')
-
             psil = bops.copyState([psi[l]], conj=False)[0]
             psilConj = bops.copyState([psi[l]], conj=True)[0]
             singlel = bops.copyState([H.singles[l]], conj=False)[0]
@@ -109,23 +98,16 @@ def getHLR(psi, l, H, dir, HLRold):
                 psil[0] ^ psilConj[0]
                 psil[1] ^ l2r_l[0]
                 psilConj[1] ^ l2r_l[1]
-                openOp =  tn.contract_between(psil, tn.contract_between(psilConj, l2r_l), name='open-operator')
+                openOp = tn.contract_between(psil, tn.contract_between(psilConj, l2r_l), name='open-operator')
             else:
                 openOp = None
-            return HExpValMid(identityChain, opSum1, openOp)
+            return HExpValMid(opSum1, openOp)
     if dir == '<<':
         if l == len(psi):
-            identityChain = tn.Node(np.zeros((psi[l-1].get_dimension(2), psi[l-1].get_dimension(2))))
             opSum = tn.Node(np.zeros((psi[l-1].get_dimension(2), psi[l-1].get_dimension(2))))
             openOp = tn.Node(np.zeros((psi[l-1].get_dimension(2), psi[l-1].get_dimension(2))))
-            return HExpValMid(identityChain, opSum, openOp)
+            return HExpValMid(opSum, openOp)
         else:
-            psil = bops.copyState([psi[l]], conj=False)[0]
-            psilConj = bops.copyState([psi[l]], conj=True)[0]
-            psil[2] ^ psilConj[2]
-            psil[1] ^ psilConj[1]
-            identityChain = tn.contract_between(psil, psilConj, name='identity-chain')
-
             psil = bops.copyState([psi[l]], conj=False)[0]
             psilConj = bops.copyState([psi[l]], conj=True)[0]
             single_l = bops.copyState([H.singles[l]], conj=False)[0]
@@ -167,12 +149,12 @@ def getHLR(psi, l, H, dir, HLRold):
                 openOp = tn.contract_between(psil, tn.contract_between(psilConj, r2l_l), name='open-operator')
             else:
                 openOp = None
-            return HExpValMid(identityChain, opSum1, openOp)
+            return HExpValMid(opSum1, openOp)
 
 
 # k is the working site
-def lanczos(HR, HL, H, k, psi):
-    [T, base] = getTridiagonal(HR, HL, H, k, psi)
+def lanczos(HL, HR, H, k, psi):
+    [T, base] = getTridiagonal(HL, HR, H, k, psi)
     [Es, Vs] = np.linalg.eig(T)
     minIndex = np.argmin(Es)
     E0 = Es[minIndex]
@@ -183,18 +165,43 @@ def lanczos(HR, HL, H, k, psi):
     M = bops.multNode(M, 1/bops.getNodeNorm(M))
     return [M, E0]
 
+def getIdentity(psi, k, dir):
+    psil = bops.copyState([psi[k]])[0]
+    psilCopy = bops.copyState([psi[k]], conj=True)[0]
+    if dir == '>>':
+        return bops.multiContraction(psil, psilCopy, '01', '01')
+    else:
+        return bops.multiContraction(psil, psilCopy, '12', '12')
 
-def getTridiagonal(HR, HL, H, k, psi):
+
+def getTridiagonal(HL, HR, H, k, psi):
     accuracy = 1e-10 # 1e-12
 
     v = bops.multiContraction(psi[k], psi[k+1], '2', '0')
     # Small innaccuracies ruin everything!
-    v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
+    print('---')
+    print(k)
+    # print(bops.getOverlap(psi, psi))
+    # print(bops.getNodeNorm(v))
+    # v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
 
     base = []
     base.append(v)
-    Hv = applyHToM(HR, HL, H, v, k)
+    Hv = applyHToM(HL, HR, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
+
+    if k > 0:
+        idl = getIdentity(psi, k-1, '>>')
+        print(idl.tensor)
+        # idl = getIdentity(psi, k, '>>')
+        # print(idl.tensor)
+        # idr = getIdentity(psi, k+1, '<<')
+        # print(idr.tensor)
+    if k+2 < len(psi):
+        idr = getIdentity(psi, k+2, '<<')
+        print(idr.tensor)
+    E = stateEnergy(psi, H)
+    print(E/alpha)
 
     w = bops.addNodes(Hv, bops.multNode(v, -alpha))
     beta = bops.getNodeNorm(w)
@@ -212,7 +219,7 @@ def getTridiagonal(HR, HL, H, k, psi):
 
         v = bops.multNode(w, 1 / beta)
         base.append(v)
-        Hv = applyHToM(HR, HL, H, v, k)
+        Hv = applyHToM(HL, HR, H, v, k)
         alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
         Tarr[counter][1] = alpha
         w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
@@ -221,17 +228,18 @@ def getTridiagonal(HR, HL, H, k, psi):
         beta = bops.getNodeNorm(w)
     T = np.zeros((len(Tarr), len(Tarr)))
     T[0][0] = Tarr[0][1]
-    T[0][1] = Tarr[0][2]
+    if len(Tarr) > 1:
+        T[0][1] = Tarr[0][2]
     for i in range(1, len(Tarr)-1):
-        T[i][i-1] = T[i][0]
-        T[i][i] = T[i][1]
-        T[i][i+1] = T[i][2]
-    T[len(Tarr)-1][len(Tarr)-2] = T[len(Tarr)-1][0]
-    T[len(Tarr) - 1][len(Tarr) - 1] = T[len(Tarr) - 1][1]
+        T[i][i-1] = Tarr[i][0]
+        T[i][i] = Tarr[i][1]
+        T[i][i+1] = Tarr[i][2]
+    T[len(Tarr)-1][len(Tarr)-2] = Tarr[len(Tarr)-1][0]
+    T[len(Tarr) - 1][len(Tarr) - 1] = Tarr[len(Tarr) - 1][1]
     return [T, base]
 
 
-def applyHToM(HR, HL, H, M, k):
+def applyHToM(HL, HR, H, M, k):
     k1 = k
     k2 = k + 1
 
@@ -249,12 +257,12 @@ def applyHToM(HR, HL, H, M, k):
 
     # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
-    HK1R2L = bops.permute(bops.multiContraction(H.r2l[k1], M, '0', '1'), [2, 1, 0, 3, 4])
+    HK1R2L = bops.permute(bops.multiContraction(M, H.r2l[k1], '1', '0'), [0, 4, 3, 1, 2])
     Hv = bops.addNodes(Hv, \
                       bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
-    HK2L2R = bops.permute(bops.multiContraction(H.l2r[k2], M, '0', '2'), [2, 3, 0, 1, 4])
+    HK2L2R = bops.permute(bops.multiContraction(M, H.l2r[k2], '2', '0'), [0, 1, 3, 4, 2])
     Hv = bops.addNodes(Hv, \
-                       bops.multiContraction(HK2L2R, HR.openOp, '34', '02'))
+                       bops.multiContraction(HK2L2R, HR.openOp, '43', '02'))
 
     # Add I(Left) x h.l2r(k1) x h.r2l(k2) x I(Right)
     HK1K2 = bops.multiContraction(M, H.l2r[k1], '1', '0')
@@ -265,27 +273,93 @@ def applyHToM(HR, HL, H, M, k):
     return Hv
 
 
-# def decomposeAndTruncate(M, k, dir, opts)
-#     # perform an SVD decomposition on M.
-#
-#     [psi(k), psi(k+1), I] = myOrthoQS(M, [1, 2], dir, opts);
-#     truncErr = I.svd2tr;
-#     psi(k).info.itags(length(psi(k).info.itags)) = ...
-#         strcat(int2str(k), 'a', psi(k).info.itags(length(psi(k).info.itags)));
-#     psi(k+1).info.itags(1) = strcat(int2str(k), 'a', psi(k+1).info.itags(1));
+def dmrgStep(HL, HR, H, psi, k, dir, opts=None):
+    # Perform a single DMRG step:
+    # 1. Contracts psi(k) and psi(k + dir) to get M.
+    # 2. Performs lancsoz and get a new contracted M.
+    # 3. Performs an SVD in order to get the new working site, at k + dir.
+    # 4. Calculates HL(k) / HR(k) (according to dir)
+    k1 = k;
+    k2 = k + 1;
+    [M, E0] = lanczos(HL, HR, H, k1, psi)
+    if k == 0:
+        d=1
+    [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir)
+    if dir == '>>':
+        newHL = getHLR(psi, k, H, dir, HL)
+        return psi, newHL, E0, truncErr
+    else:
+        newHR = getHLR(psi, k+1, H, dir, HR)
+        return psi, newHR, E0, truncErr
 
 
-N=8
+# Assume the OC is at the last (rightmost) site. sweeps all the way left and back right again.
+def dmrgSweep(psi, H, HLs, HRs):
+    k = len(psi) - 2
+    maxTruncErr = 0
+    while k > 0:
+        [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<')
+        # if HRs[k+1] is not None:
+        # TODO remove all nodes in HLR
+            # tn.remove_node(HRs[k+1])
+        HRs[k+1] = newHR
+        if len(truncErr) > 0 and maxTruncErr < max(truncErr):
+            maxTruncErr = max(truncErr)
+        k -= 1
+    for k in range(len(psi) - 2):
+        E0Old = E0
+        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '<<')
+        if E0 > E0Old:
+            print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
+        # if HLs[k+1] is not None:
+        # TODO remove all nodes in HLR
+        #     tn.remove_node(HLs[k+1])
+        HLs[k + 1] = newHL
+        if len(truncErr) > 0 and maxTruncErr < max(truncErr):
+            maxTruncErr = truncErr
+    return E0, truncErr
+
+
+def stateEnergy(psi: tn.Node, H: HOp):
+    E = 0
+    for i in range(len(psi)):
+        psiCopy = bops.copyState(psi)
+        single_i = bops.copyState([H.singles[i]])[0]
+        psiCopy[i] = bops.permute(tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))), [0, 2, 1])
+        E += bops.getOverlap(psiCopy, psi)
+        bops.removeState(psiCopy)
+        tn.remove_node(single_i)
+    for i in range(len(psi) - 1):
+        psiCopy = bops.copyState(psi)
+        r2l = bops.copyState([H.r2l[i+1]])[0]
+        l2r = bops.copyState([H.l2r[i]])[0]
+        psiCopy[i][2] ^ psiCopy[i+1][0]
+        psiCopy[i][1] ^ l2r[0]
+        r2l[0] ^ psiCopy[i+1][1]
+        l2r[2] ^ r2l[2]
+        M = tn.contract_between(psiCopy[i], \
+                                tn.contract_between(l2r, tn.contract_between(r2l, psiCopy[i+1])))
+        [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
+        E += bops.getOverlap(psiCopy, psi)
+        bops.removeState(psiCopy)
+        tn.remove_node(r2l)
+        tn.remove_node(l2r)
+    return E
+
+
+
+
+N = 8
 psi = bops.getStartupState(N)
 t = 0.5
 onsiteTerm = np.zeros((2, 2))
 onsiteTerm[1][1] = 1
 onsiteTerm[0][0] = 1
 neighborTerm = np.zeros((4, 4))
-neighborTerm[1][2] = 1
-neighborTerm[2][1] = 1
-neighborTerm[0][0] = 1
-neighborTerm[3][3] = 1
+neighborTerm[1][2] = 0
+neighborTerm[2][1] = 0
+neighborTerm[0][0] = 0
+neighborTerm[3][3] = 0
 H = getDMRGH(N, onsiteTerm, neighborTerm)
 HLs = [None] * (N+1)
 HLs[0] = getHLR(psi, -1, H, '>>', 0)
@@ -294,14 +368,7 @@ for l in range(N):
 HRs = [None] * (N+1)
 HRs[N] = getHLR(psi, N,  H, '<<', 0)
 k = N-2
-[T, base] = getTridiagonal(HRs[k+2], HLs[k], H, k, psi)
-[M, E0] = lanczos(HRs[k+2], HLs[k], H, k, psi)
-# TODO this gives s5, s7 for some reason
-bops.printNode(M)
-[l, r] = bops.svdTruncation(M, [M[0], M[1]], [M[2], M[3]], '<<', leftEdgeName='VR5',  rightEdgeName='vL6*')
-bops.printNode(l)
-bops.printNode(r)
-# TODO  same edge  for unconnected nodes
-# TODO svd truncation edge name
-# https://github.com/google/TensorNetwork/blob/master/tensornetwork/network_operations.py#L473
-# TODO remove nodes
+[E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+print(E0)
+print(truncErr)
+print(stateEnergy(psi, H))
