@@ -8,21 +8,21 @@ from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
 def getStartupState(n):
     psi = [None] * n
     baseLeftTensor = np.zeros((1, 2, 2))
-    baseLeftTensor[0, 0, 0] = -1
-    baseLeftTensor[0, 1, 1] = 1
+    baseLeftTensor[0, 1, 0] = -1
+    baseLeftTensor[0, 0, 1] = 1
     psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], \
                 backend = None)
     baseMiddleTensor = np.zeros((2, 2, 2))
-    baseMiddleTensor[0, 1, 0] = 1
+    baseMiddleTensor[0, 1, 0] = -1
+    baseMiddleTensor[1, 0, 1] = 1
+    baseMiddleTensor[1, 1, 0] = -1
     baseMiddleTensor[0, 0, 1] = 1
-    # baseMiddleTensor[0, 0, 0] = 1
-    # baseMiddleTensor[0, 1, 1] = 1
     for i in range(1, n-1):
         psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)), \
                                axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)], \
                                backend = None)
     baseRightTensor = np.zeros((2, 2, 1))
-    baseRightTensor[0, 1, 0] = 1 / math.sqrt(2)
+    baseRightTensor[0, 1, 0] = -1 / math.sqrt(2)
     baseRightTensor[1, 0, 0] = 1 / math.sqrt(2)
     psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)), \
                                axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)], \

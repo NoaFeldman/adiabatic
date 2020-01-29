@@ -183,11 +183,7 @@ def getTridiagonal(HL, HR, H, k, psi):
 
     v = bops.multiContraction(psi[k], psi[k+1], '2', '0')
     # Small innaccuracies ruin everything!
-    print('---')
-    print(k)
-    # print(bops.getOverlap(psi, psi))
-    # print(bops.getNodeNorm(v))
-    # v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
+    v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
 
     base = []
     base.append(v)
@@ -195,7 +191,6 @@ def getTridiagonal(HL, HR, H, k, psi):
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
 
     E = stateEnergy(psi, H)
-    print(E/alpha)
 
     w = bops.addNodes(Hv, bops.multNode(v, -alpha))
     beta = bops.getNodeNorm(w)
@@ -278,18 +273,23 @@ def dmrgStep(HL, HR, H, psi, k, dir, opts=None):
     [M, E0] = lanczos(HL, HR, H, k1, psi)
     if k == 0:
         d=2
-    if dir == '>>':
-        if k > 1:
-            idl = getIdentity(psi, k - 2, '>>')
-            print(idl)
-        idr = getIdentity(psi, k, '<<')
-        print(idr)
-    else:
-        idl = getIdentity(psi, k, '>>')
-        print(idl)
-        if k + 2 < len(psi):
-            idr = getIdentity(psi, k + 2, '<<')
-            print(idr)
+    # if dir == '>>':
+    #     print('>>')
+    #     if k == 0:
+    #         idl = getIdentity(psi, k, '>>')
+    #         print(idl)
+    #     else:
+    #         idl = getIdentity(psi, k-1, '>>')
+    #         print(idl)
+    #     idr = getIdentity(psi, k+1, '<<')
+    #     print(idr)
+    # else:
+    #     print('<<')
+    #     idl = getIdentity(psi, k, '>>')
+    #     print(idl)
+    #     if k + 2 < len(psi):
+    #         idr = getIdentity(psi, k + 2, '<<')
+    #         print(idr)
     [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir)
     if dir == '>>':
         newHL = getHLR(psi, k, H, dir, HL)
@@ -314,7 +314,7 @@ def dmrgSweep(psi, H, HLs, HRs):
         k -= 1
     for k in range(len(psi) - 2):
         E0Old = E0
-        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '<<')
+        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>')
         if E0 > E0Old:
             print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
         # if HLs[k+1] is not None:
@@ -323,7 +323,7 @@ def dmrgSweep(psi, H, HLs, HRs):
         HLs[k + 1] = newHL
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = truncErr
-    return E0, truncErr
+    return psi, E0, truncErr
 
 
 def stateEnergy(psi: tn.Node, H: HOp):
@@ -364,8 +364,8 @@ onsiteTerm[0][0] = 0
 neighborTerm = np.zeros((4, 4))
 neighborTerm[1][2] = 1
 neighborTerm[2][1] = 1
-neighborTerm[0][0] = 1
-neighborTerm[3][3] = 1
+neighborTerm[0][0] = 0
+neighborTerm[3][3] = 0
 H = getDMRGH(N, onsiteTerm, neighborTerm)
 HLs = [None] * (N+1)
 HLs[0] = getHLR(psi, -1, H, '>>', 0)
@@ -374,7 +374,32 @@ for l in range(N):
 HRs = [None] * (N+1)
 HRs[N] = getHLR(psi, N,  H, '<<', 0)
 k = N-2
-[E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+[psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
 print(E0)
 print(truncErr)
 print(stateEnergy(psi, H))
+
+psi2 = bops.copyState(psi)
+currTensor = psi2[int(N/2)].tensor
+#     _          _
+# a--|_|--c >>  |_|--c
+#     |          |
+#     b          ab
+shape = currTensor.shape
+currTensor = np.reshape(currTensor, (shape[0] * shape[1], shape[2]))
+newTensor = np.zeros(currTensor.shape)
+
+def getOrthogonalVector(v):
+    result = v
+    temp = np.dot(v.conj().T[:len(v)-1], v[:len(v)-1])
+    result[len(v)-1] = np.conj(-temp / v[len(v)-1])
+    result = result / math.sqrt(np.dot(result.conj().T, result))
+    print(np.dot(result, v))
+    return result
+
+
+for i in range(len(currTensor)):
+    newTensor[:, i] = getOrthogonalVector(currTensor[:, i])
+newTensor.reshape(shape)
+psi2[int(N/2)].set_tensor(newTensor)
+print(bops.getOverlap(psi, psi2))
