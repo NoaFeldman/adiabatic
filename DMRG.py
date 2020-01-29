@@ -174,7 +174,7 @@ def getIdentity(psi, k, dir):
         result = bops.multiContraction(psil, psilCopy, '12', '12').tensor
     for i in range(len(result)):
         for j in range(len(result[0])):
-            result[i][j] = int(result[i][j])
+            result[i][j] = round(result[i][j], 2)
     return result
 
 
@@ -379,27 +379,7 @@ print(E0)
 print(truncErr)
 print(stateEnergy(psi, H))
 
-psi2 = bops.copyState(psi)
-currTensor = psi2[int(N/2)].tensor
-#     _          _
-# a--|_|--c >>  |_|--c
-#     |          |
-#     b          ab
-shape = currTensor.shape
-currTensor = np.reshape(currTensor, (shape[0] * shape[1], shape[2]))
-newTensor = np.zeros(currTensor.shape)
-
-def getOrthogonalVector(v):
-    result = v
-    temp = np.dot(v.conj().T[:len(v)-1], v[:len(v)-1])
-    result[len(v)-1] = np.conj(-temp / v[len(v)-1])
-    result = result / math.sqrt(np.dot(result.conj().T, result))
-    print(np.dot(result, v))
-    return result
-
-
-for i in range(len(currTensor)):
-    newTensor[:, i] = getOrthogonalVector(currTensor[:, i])
-newTensor.reshape(shape)
-psi2[int(N/2)].set_tensor(newTensor)
-print(bops.getOverlap(psi, psi2))
+k = N-1
+while k > int(N/2):
+    psi = bops.shiftWorkingSite(psi, k , '<<')
+    k -= 1

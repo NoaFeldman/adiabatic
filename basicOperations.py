@@ -150,6 +150,7 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
         leftEdgeName = None
         rightEdgeName = edgeName
 
+    # TODO we can take U or V here and mix it in order to get an orthogonal state I think
     [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
                                        left_name=leftName, right_name=rightName, \
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
@@ -192,6 +193,24 @@ def assignNewSiteTensors(psi, k, M, dir):
     # if k+2 < len(psi):
     #     psi[k+1][2] ^ psi[k+2][0]
     return [psi, truncErr]
+
+
+def getEdgeNames(node: tn.Node):
+    result = []
+    for edge in node.edges:
+        result.append(edge.name)
+    return result
+
+
+# k is curr working site, shift it by one in dir direction.
+def shiftWorkingSite(psi: List[tn.Node], k, dir):
+    if dir == '<<':
+        pair = tn.contract(psi[k-1][2] ^ psi[k][0], axis_names=getEdgeNames(psi[k-1])[:2] + getEdgeNames(psi[k])[1:])
+        [psi, truncErr] = assignNewSiteTensors(psi, k-1, pair, dir)
+    else:
+        pair = tn.contract(psi[k][2] ^ psi[k+1][0], axis_names=getEdgeNames(psi[k])[:2] + getEdgeNames(psi[k+1])[1:])
+        [psi, truncErr] = assignNewSiteTensors(psi, k, pair, dir)
+    return psi
 
 
 def removeState(psi):
