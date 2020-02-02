@@ -218,29 +218,31 @@ def removeState(psi):
 
 
 def addStates(psi1: List[tn.Node], psi2: List[tn.Node]):
+    result = copyState(psi1)
     resultTensor = np.zeros((1, psi1[0].shape[1], psi1[0].shape[2] + psi2[0].shape[2]))
     resultTensor[0, :, :psi1[0].shape[2]] = psi1[0].tensor
     resultTensor[0, :, psi1[0].shape[2]:] = psi2[0].tensor
-    psi1[0].set_tensor(resultTensor)
+    result[0].set_tensor(resultTensor)
     for i in range(1, len(psi1)-1):
         resultTensor = \
             np.zeros((psi1[i].shape[0] + psi2[i].shape[0], psi1[i].shape[1], psi1[i].shape[2] + psi2[i].shape[2]))
         resultTensor[:psi1[i].shape[0], :, :psi1[i].shape[2]] = psi1[i].tensor
         resultTensor[psi1[i].shape[0]:, :, psi1[i].shape[2]:] = psi2[i].tensor
-        psi1[i].set_tensor(resultTensor)
+        result[i].set_tensor(resultTensor)
     resultTensor = np.zeros((psi1[len(psi1)-1].shape[0] + psi2[len(psi1)-1].shape[0], psi1[len(psi1)-1].shape[1], 1))
     resultTensor[:psi1[len(psi1)-1].shape[0], :, :] = psi1[len(psi1)-1].tensor
     resultTensor[psi1[len(psi1)-1].shape[0]:, :, :] = psi2[len(psi1)-1].tensor
-    psi1[len(psi1)-1].set_tensor(resultTensor)
-    return psi1
+    result[len(psi1)-1].set_tensor(resultTensor)
+    return result
 
 
-def getOrthogonalState(psi: List[tn.Node]):
+def getOrthogonalState(psi: List[tn.Node], psiInitial=None):
     psiCopy = copyState(psi)
-    initial = getStartupState(len(psi))
-    overlap = getOverlap(psiCopy, initial)
+    if psiInitial is None:
+        psiInitial = getStartupState(len(psi))
+    overlap = getOverlap(psiCopy, psiInitial)
     psiCopy[0] = multNode(psiCopy[0], -overlap)
-    result = addStates(initial, psiCopy)
+    result = addStates(psiInitial, psiCopy)
     result[0] = multNode(result[0], 1/math.sqrt(getOverlap(result, result)))
     removeState(psiCopy)
     return result

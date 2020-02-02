@@ -153,8 +153,8 @@ def getHLR(psi, l, H, dir, HLRold):
 
 
 # k is the working site
-def lanczos(HL, HR, H, k, psi):
-    [T, base] = getTridiagonal(HL, HR, H, k, psi)
+def lanczos(HL, HR, H, k, psi, psiCompare):
+    [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare)
     [Es, Vs] = np.linalg.eig(T)
     minIndex = np.argmin(Es)
     E0 = Es[minIndex]
@@ -178,17 +178,24 @@ def getIdentity(psi, k, dir):
     return result
 
 
-def getTridiagonal(HL, HR, H, k, psi):
+def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
     accuracy = 1e-10 # 1e-12
 
     v = bops.multiContraction(psi[k], psi[k+1], '2', '0')
     # Small innaccuracies ruin everything!
     v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
 
+    psiCopy = bops.copyState(psi)
+
     base = []
     base.append(v)
     Hv = applyHToM(HL, HR, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
+
+    if psiCompare is not None:
+        copyV = bops.copyState([v])[0]
+        psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
+        print('line 196, k = ' + str(k) + ', overlap = ' + str(bops.getOverlap(psiCopy, psiCompare)))
 
     E = stateEnergy(psi, H)
 
@@ -208,7 +215,13 @@ def getTridiagonal(HL, HR, H, k, psi):
 
         v = bops.multNode(w, 1 / beta)
         base.append(v)
+
+        if psiCompare is not None:
+            copyV = bops.copyState([v])[0]
+            psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
+            print('line 219, k = ' + str(k) + ', counter = ' + str(counter) + ', overlap = ' + str(bops.getOverlap(psiCopy, psiCompare)))
         Hv = applyHToM(HL, HR, H, v, k)
+
         alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
         Tarr[counter][1] = alpha
         w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
@@ -262,49 +275,36 @@ def applyHToM(HL, HR, H, M, k):
     return Hv
 
 
-def dmrgStep(HL, HR, H, psi, k, dir, opts=None):
+def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None):
     # Perform a single DMRG step:
     # 1. Contracts psi(k) and psi(k + dir) to get M.
     # 2. Performs lancsoz and get a new contracted M.
     # 3. Performs an SVD in order to get the new working site, at k + dir.
     # 4. Calculates HL(k) / HR(k) (according to dir)
-    k1 = k;
-    k2 = k + 1;
-    [M, E0] = lanczos(HL, HR, H, k1, psi)
-    if k == 0:
-        d=2
-    # if dir == '>>':
-    #     print('>>')
-    #     if k == 0:
-    #         idl = getIdentity(psi, k, '>>')
-    #         print(idl)
-    #     else:
-    #         idl = getIdentity(psi, k-1, '>>')
-    #         print(idl)
-    #     idr = getIdentity(psi, k+1, '<<')
-    #     print(idr)
-    # else:
-    #     print('<<')
-    #     idl = getIdentity(psi, k, '>>')
-    #     print(idl)
-    #     if k + 2 < len(psi):
-    #         idr = getIdentity(psi, k + 2, '<<')
-    #         print(idr)
+    k1 = k
+    k2 = k + 1
+    [M, E0] = lanczos(HL, HR, H, k1, psi, psiCompare)
     [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir)
     if dir == '>>':
+        if psiCompare is not None:
+            psiCompare = bops.shiftWorkingSite(psiCompare, k, '>>')
+            psi = bops.getOrthogonalState(psiCompare, psiInitial=psi)
         newHL = getHLR(psi, k, H, dir, HL)
         return psi, newHL, E0, truncErr
     else:
+        if psiCompare is not None:
+            psiCompare = bops.shiftWorkingSite(psiCompare, k, '<<')
+            psi = bops.getOrthogonalState(psiCompare, psiInitial=psi)
         newHR = getHLR(psi, k+1, H, dir, HR)
         return psi, newHR, E0, truncErr
 
 
 # Assume the OC is at the last (rightmost) site. sweeps all the way left and back right again.
-def dmrgSweep(psi, H, HLs, HRs):
+def dmrgSweep(psi, H, HLs, HRs, psiCompare=None):
     k = len(psi) - 2
     maxTruncErr = 0
     while k > 0:
-        [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<')
+        [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
         # if HRs[k+1] is not None:
         # TODO remove all nodes in HLR
             # tn.remove_node(HRs[k+1])
@@ -314,7 +314,7 @@ def dmrgSweep(psi, H, HLs, HRs):
         k -= 1
     for k in range(len(psi) - 2):
         E0Old = E0
-        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>')
+        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
         if E0 > E0Old:
             print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
         # if HLs[k+1] is not None:
@@ -337,10 +337,9 @@ def getH(N, onsiteTerm, neighborTerm, psi):
     return H, HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, N, psi, accuration=10**(-8)):
-    psi = bops.getStartupState(N)
+def getGroundState(H, HLs, HRs, N, psi, psiCompare=None, accuration=10**(-8)):
     truncErrs = []
-    [psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+    [psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
     while True:
         [psi, E0Curr, truncErr] = dmrgSweep(psi, H, HLs, HRs)
@@ -389,12 +388,24 @@ neighborTerm[1][2] = 1
 neighborTerm[2][1] = 1
 neighborTerm[0][0] = 0
 neighborTerm[3][3] = 0
-psi = bops.getStartupState(N)
-H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi)
-psi, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi)
-print(stateEnergy(psi, H))
-psi2 = bops.getOrthogonalState(psi)
-print(bops.getOverlap(psi, psi2))
+psi1 = bops.getStartupState(N)
+H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi1)
+psi1, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi1, None)
+print(stateEnergy(psi1, H))
+print(len(truncErrs))
+psi2 = bops.getOrthogonalState(psi1)
+print(bops.getOverlap(psi1, psi2))
 H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi2)
-psi2, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi2)
+psi2, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi2, psi1)
 print(stateEnergy(psi2, H))
+print(bops.getOverlap(psi1, psi2))
+print(len(truncErrs))
+# psi3 = bops.addStates(psi2, psi)
+# print(bops.getOverlap(psi, psi3))
+# print(bops.getOverlap(psi2, psi3))
+# psi3[0] = bops.multNode(psi3[0], 1 / math.sqrt(bops.getOverlap(psi3, psi3)))
+# H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi3)
+# psi3, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi3)
+# print(stateEnergy(psi3, H))
+# print(bops.getOverlap(psi, psi3))
+# print(bops.getOverlap(psi2, psi3))
