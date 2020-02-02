@@ -326,6 +326,30 @@ def dmrgSweep(psi, H, HLs, HRs):
     return psi, E0, truncErr
 
 
+def getH(N, onsiteTerm, neighborTerm, psi):
+    H = getDMRGH(N, onsiteTerm, neighborTerm)
+    HLs = [None] * (N + 1)
+    HLs[0] = getHLR(psi, -1, H, '>>', 0)
+    for l in range(N):
+        HLs[l + 1] = getHLR(psi, l, H, '>>', HLs[l])
+    HRs = [None] * (N + 1)
+    HRs[N] = getHLR(psi, N, H, '<<', 0)
+    return H, HLs, HRs
+
+
+def getGroundState(H, HLs, HRs, N, psi, accuration=10**(-8)):
+    psi = bops.getStartupState(N)
+    truncErrs = []
+    [psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+    truncErrs.append(truncErr)
+    while True:
+        [psi, E0Curr, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+        truncErrs.append(truncErr)
+        if math.fabs((E0Curr-E0)/E0) < accuration:
+            return psi, E0Curr, truncErrs
+        E0 = E0Curr
+
+
 def stateEnergy(psi: tn.Node, H: HOp):
     E = 0
     for i in range(len(psi)):
@@ -356,7 +380,6 @@ def stateEnergy(psi: tn.Node, H: HOp):
 
 
 N = 8
-psi = bops.getStartupState(N)
 t = 0.5
 onsiteTerm = np.zeros((2, 2))
 onsiteTerm[1][1] = 0
@@ -366,20 +389,12 @@ neighborTerm[1][2] = 1
 neighborTerm[2][1] = 1
 neighborTerm[0][0] = 0
 neighborTerm[3][3] = 0
-H = getDMRGH(N, onsiteTerm, neighborTerm)
-HLs = [None] * (N+1)
-HLs[0] = getHLR(psi, -1, H, '>>', 0)
-for l in range(N):
-    HLs[l+1] = getHLR(psi, l, H, '>>', HLs[l])
-HRs = [None] * (N+1)
-HRs[N] = getHLR(psi, N,  H, '<<', 0)
-k = N-2
-[psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs)
-print(E0)
-print(truncErr)
+psi = bops.getStartupState(N)
+H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi)
+psi, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi)
 print(stateEnergy(psi, H))
-
-k = N-1
-while k > int(N/2):
-    psi = bops.shiftWorkingSite(psi, k , '<<')
-    k -= 1
+psi2 = bops.getOrthogonalState(psi)
+print(bops.getOverlap(psi, psi2))
+H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi2)
+psi2, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi2)
+print(stateEnergy(psi2, H))

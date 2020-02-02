@@ -150,7 +150,6 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
         leftEdgeName = None
         rightEdgeName = edgeName
 
-    # TODO we can take U or V here and mix it in order to get an orthogonal state I think
     [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
                                        left_name=leftName, right_name=rightName, \
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
@@ -181,9 +180,9 @@ def getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
 
 
 # Split M into 2 3-rank tensors for sites k, k+1
-def assignNewSiteTensors(psi, k, M, dir):
-    [sitek, sitekPlus1, truncErr] = svdTruncation(M, [M[0], M[1]], [M[2], M[3]], \
-            dir, leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)))
+def assignNewSiteTensors(psi, k, M, dir, getOrthogonal=False):
+    [sitek, sitekPlus1, truncErr] = svdTruncation(M, [M[0], M[1]], [M[2], M[3]], dir, \
+            leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)))
     tn.remove_node(psi[k])
     psi[k] = sitek
     # if k > 0:
@@ -216,3 +215,32 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir):
 def removeState(psi):
     for i in range(len(psi)):
         tn.remove_node(psi[i])
+
+
+def addStates(psi1: List[tn.Node], psi2: List[tn.Node]):
+    resultTensor = np.zeros((1, psi1[0].shape[1], psi1[0].shape[2] + psi2[0].shape[2]))
+    resultTensor[0, :, :psi1[0].shape[2]] = psi1[0].tensor
+    resultTensor[0, :, psi1[0].shape[2]:] = psi2[0].tensor
+    psi1[0].set_tensor(resultTensor)
+    for i in range(1, len(psi1)-1):
+        resultTensor = \
+            np.zeros((psi1[i].shape[0] + psi2[i].shape[0], psi1[i].shape[1], psi1[i].shape[2] + psi2[i].shape[2]))
+        resultTensor[:psi1[i].shape[0], :, :psi1[i].shape[2]] = psi1[i].tensor
+        resultTensor[psi1[i].shape[0]:, :, psi1[i].shape[2]:] = psi2[i].tensor
+        psi1[i].set_tensor(resultTensor)
+    resultTensor = np.zeros((psi1[len(psi1)-1].shape[0] + psi2[len(psi1)-1].shape[0], psi1[len(psi1)-1].shape[1], 1))
+    resultTensor[:psi1[len(psi1)-1].shape[0], :, :] = psi1[len(psi1)-1].tensor
+    resultTensor[psi1[len(psi1)-1].shape[0]:, :, :] = psi2[len(psi1)-1].tensor
+    psi1[len(psi1)-1].set_tensor(resultTensor)
+    return psi1
+
+
+def getOrthogonalState(psi: List[tn.Node]):
+    psiCopy = copyState(psi)
+    initial = getStartupState(len(psi))
+    overlap = getOverlap(psiCopy, initial)
+    psiCopy[0] = multNode(psiCopy[0], -overlap)
+    result = addStates(initial, psiCopy)
+    result[0] = multNode(result[0], 1/math.sqrt(getOverlap(result, result)))
+    removeState(psiCopy)
+    return result
