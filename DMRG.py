@@ -69,6 +69,8 @@ def getHLR(psi, l, H, dir, HLRold):
             psilConj[1] ^ singlel[1]
             opSum1 = tn.contract_between(psil, \
                      tn.contract_between(singlel, psilConj), name='operator-sum')
+            if np.max(opSum1.tensor) > 100:
+                g=1
             if l > 0:
                 psil = bops.copyState([psi[l]], conj=False)[0]
                 psilConj = bops.copyState([psi[l]], conj=True)[0]
@@ -81,6 +83,8 @@ def getHLR(psi, l, H, dir, HLRold):
                 r2l_l[2] ^ HLRoldCopy[2]
                 opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(r2l_l, HLRoldCopy)))
                 opSum1 = bops.addNodes(opSum1, opSum2)
+                if np.max(opSum1.tensor) > 100:
+                    g = 1
 
             psil = bops.copyState([psi[l]], conj=False)[0]
             psilConj = bops.copyState([psi[l]], conj=True)[0]
@@ -90,6 +94,8 @@ def getHLR(psi, l, H, dir, HLRold):
             psil[1] ^ psilConj[1]
             opSum3 = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy))
             opSum1 = bops.addNodes(opSum1, opSum3)
+            if np.max(opSum1.tensor) > 100:
+                g=1
 
             if l < len(psi) - 1:
                 psil = bops.copyState([psi[l]], conj=False)[0]
@@ -289,14 +295,20 @@ def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None):
         if psiCompare is not None:
             psiCompare = bops.shiftWorkingSite(psiCompare, k, '>>')
             psi = bops.getOrthogonalState(psiCompare, psiInitial=psi)
-        newHL = getHLR(psi, k, H, dir, HL)
-        return psi, newHL, E0, truncErr
+            HLs, HRs = getHLRs(H, psi, workingSite=k+1)
+            return psi, HLs, HRs, E0, truncErr
+        else:
+            newHL = getHLR(psi, k, H, dir, HL)
+            return psi, newHL, E0, truncErr
     else:
         if psiCompare is not None:
             psiCompare = bops.shiftWorkingSite(psiCompare, k, '<<')
             psi = bops.getOrthogonalState(psiCompare, psiInitial=psi)
-        newHR = getHLR(psi, k+1, H, dir, HR)
-        return psi, newHR, E0, truncErr
+            HLs, HRs = getHLRs(H, psi, workingSite=k)
+            return psi, HLs, HRs, E0, truncErr
+        else:
+            newHR = getHLR(psi, k+1, H, dir, HR)
+            return psi, newHR, E0, truncErr
 
 
 # Assume the OC is at the last (rightmost) site. sweeps all the way left and back right again.
@@ -304,45 +316,57 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None):
     k = len(psi) - 2
     maxTruncErr = 0
     while k > 0:
-        [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
-        # if HRs[k+1] is not None:
-        # TODO remove all nodes in HLR
-            # tn.remove_node(HRs[k+1])
-        HRs[k+1] = newHR
+        if psiCompare is None:
+            [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
+            # if HRs[k+1] is not None:
+            # TODO remove all nodes in HLR
+                # tn.remove_node(HRs[k+1])
+            HRs[k+1] = newHR
+        else:
+            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
         k -= 1
     for k in range(len(psi) - 2):
         E0Old = E0
-        [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
+        if psiCompare is None:
+            [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
+            HLs[k + 1] = newHL
+        else:
+            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
         if E0 > E0Old:
             print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
         # if HLs[k+1] is not None:
         # TODO remove all nodes in HLR
         #     tn.remove_node(HLs[k+1])
-        HLs[k + 1] = newHL
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = truncErr
-    return psi, E0, truncErr
+    return psi, E0, truncErr, HLs, HRs
 
 
-def getH(N, onsiteTerm, neighborTerm, psi):
-    H = getDMRGH(N, onsiteTerm, neighborTerm)
+def getHLRs(H, psi, workingSite=None):
+    N = len(psi)
+    if workingSite is None:
+        workingSite=N-1
     HLs = [None] * (N + 1)
     HLs[0] = getHLR(psi, -1, H, '>>', 0)
-    for l in range(N):
+    for l in range(workingSite):
         HLs[l + 1] = getHLR(psi, l, H, '>>', HLs[l])
     HRs = [None] * (N + 1)
     HRs[N] = getHLR(psi, N, H, '<<', 0)
-    return H, HLs, HRs
+    l = N-1
+    while l > workingSite:
+        HRs[l] = getHLR(psi, l, H, '<<', HRs[l+1])
+        l -= 1
+    return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, N, psi, psiCompare=None, accuration=10**(-8)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-8)):
     truncErrs = []
-    [psi, E0, truncErr] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
+    [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
     while True:
-        [psi, E0Curr, truncErr] = dmrgSweep(psi, H, HLs, HRs)
+        [psi, E0Curr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
         truncErrs.append(truncErr)
         if math.fabs((E0Curr-E0)/E0) < accuration:
             return psi, E0Curr, truncErrs
@@ -389,14 +413,15 @@ neighborTerm[2][1] = 1
 neighborTerm[0][0] = 0
 neighborTerm[3][3] = 0
 psi1 = bops.getStartupState(N)
-H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi1)
-psi1, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi1, None)
+H = getDMRGH(N, onsiteTerm, neighborTerm)
+HLs, HRs = getHLRs(H, psi1)
+psi1, E0, truncErrs = getGroundState(H, HLs, HRs, psi1, None)
 print(stateEnergy(psi1, H))
 print(len(truncErrs))
 psi2 = bops.getOrthogonalState(psi1)
 print(bops.getOverlap(psi1, psi2))
-H, HLs, HRs = getH(N, onsiteTerm, neighborTerm, psi2)
-psi2, E0, truncErrs = getGroundState(H, HLs, HRs, N, psi2, psi1)
+HLs, HRs = getHLRs(H, psi2)
+psi2, E0, truncErrs = getGroundState(H, HLs, HRs, psi2, psi1)
 print(stateEnergy(psi2, H))
 print(bops.getOverlap(psi1, psi2))
 print(len(truncErrs))

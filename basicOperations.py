@@ -13,10 +13,10 @@ def getStartupState(n):
     psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], \
                 backend = None)
     baseMiddleTensor = np.zeros((2, 2, 2))
-    baseMiddleTensor[0, 1, 0] = -1
-    baseMiddleTensor[1, 0, 1] = 1
-    baseMiddleTensor[1, 1, 0] = -1
-    baseMiddleTensor[0, 0, 1] = 1
+    baseMiddleTensor[0, 1, 0] = -1 / math.sqrt(2)
+    baseMiddleTensor[1, 0, 1] = 1 / math.sqrt(2)
+    baseMiddleTensor[1, 1, 0] = -1 / math.sqrt(2)
+    baseMiddleTensor[0, 0, 1] = 1 / math.sqrt(2)
     for i in range(1, n-1):
         psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)), \
                                axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)], \
@@ -28,7 +28,7 @@ def getStartupState(n):
                                axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)], \
                                backend = None)
     norm = getOverlap(psi, psi)
-    psi[0] = multNode(psi[0], 1/math.sqrt(norm))
+    psi[n-1] = multNode(psi[n-1], 1/math.sqrt(norm))
     return psi
 
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
@@ -243,6 +243,13 @@ def getOrthogonalState(psi: List[tn.Node], psiInitial=None):
     overlap = getOverlap(psiCopy, psiInitial)
     psiCopy[0] = multNode(psiCopy[0], -overlap)
     result = addStates(psiInitial, psiCopy)
-    result[0] = multNode(result[0], 1/math.sqrt(getOverlap(result, result)))
+    result[len(result)-1] = multNode(result[len(result)-1], 1/math.sqrt(getOverlap(result, result)))
     removeState(psiCopy)
+    k = len(result)-1
+    while k > 0:
+        result = shiftWorkingSite(result, k, '<<')
+        k -= 1
+    while k < len(result)-1:
+        result = shiftWorkingSite(result, k, '>>')
+        k += 1
     return result
